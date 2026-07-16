@@ -1,7 +1,9 @@
 import React from "react"
 import { Link } from "react-router-dom"
+import { useParams } from "react-router-dom"
 
 function Preview(){
+  const {slug} = useParams;
   return(
     <>
     <div className="preview-layout">
@@ -13,7 +15,7 @@ function Preview(){
         <span className="preview-topbar__title">Japan Spring Trip</span>
         <span className="preview-topbar__slug">/japan-spring-trip</span>
       </div>
-      <Link to={'itineraries/:slug/builder'} className="btn btn--ghost btn--sm">
+      <Link to={`/itineraries/${slug}/builder`} className="btn btn--ghost btn--sm">
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 2L3 6.5 8 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="round"/>
         </svg>

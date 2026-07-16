@@ -86,7 +86,7 @@ const handleSubmit = async(e) =>{
         <div className="form-group">
           <label className="form-label" htmlFor="email">Email Address</label>
           <input
-            className="form-input form-input--error"
+            className={`form-input ${erroremail ? 'form-input--error' : ''}`}
             type="email"
             id="email"
             name="email"

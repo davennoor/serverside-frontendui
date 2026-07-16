@@ -4,43 +4,224 @@ import axios from "axios";
 import { useState } from "react";
 import { useEffect } from "react";
 import Navbar from "../components/Navbar";
+import { useParams } from "react-router-dom";
 
-function Itineraries(){
+function Itineraries() {
+  // ---------------------------------------------------------------------------
+  // 1. STATES & ROUTING HOOKS
+  // ---------------------------------------------------------------------------
   const [itineraries, setItineraires] = useState([]);
-  const navigate = useNavigate()
+  const [isItineraryOpen, setIsItineraryOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [currentEditingSlug, setCurrentEditingSlug] = useState("");
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [slugToDelete, setSlugToDelete] = useState("");
+  const [titleToDelete, setTitleToDelete] = useState("");
+  
+  // States untuk Form New/Add Itinerary
+  const [formTitle, setFormTitle] = useState("");
+  const [formSlug, setFormSlug] = useState("");
+  const [formSummary, setFormSummary] = useState("");
+  
+  const navigate = useNavigate();
+  const { slug } = useParams();
 
-  const fetcItineraries = async() => {
+  // ---------------------------------------------------------------------------
+  // 2. DATA FETCHING (API GET)
+  // ---------------------------------------------------------------------------
+  const fetcItineraries = async () => {
     const token = localStorage.getItem('token');
-    if(!token) return;
+    if (!token) return;
 
-    try{
-      const res = await axios.get('http://127.0.0.1:8000/api/itineraries',{
-        headers:{
-          Authorization:`Bearer ${token}`
+    try {
+      const res = await axios.get('http://127.0.0.1:8000/api/itineraries', {
+        headers: {
+          Authorization: `Bearer ${token}`
         }
-      })
-      setItineraires(res.data.data.itineraries)
-    }
-    catch(error){
-      conosle.error('Error fetching itineraies data', error);
+      });
+      setItineraires(res.data.data.itineraries);
+    } catch (error) {
+      console.error('Error fetching itineraies data', error);
       setItineraires([]);
     }
   };
 
-
+  // Panggil fetch pertama kali saat komponen di-mount
   useEffect(() => {
     fetcItineraries();
-  }, [])
+  }, []);
 
+  // ---------------------------------------------------------------------------
+  // 3. KEYBOARD SHORTCUTS & EVENT LISTENERS
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Alt + N -> Buka modal
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setIsItineraryOpen(true);
+      }
+      // Esc -> Tutup modal
+      if (e.key === 'Escape') {
+        setIsItineraryOpen(false);
+      }
+    };
 
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
+  // ---------------------------------------------------------------------------
+  // 4. HELPER FUNCTIONS & FORM INPUT HANDLERS
+  // ---------------------------------------------------------------------------
+  const convertToSlug = (text) => {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9 -]/g, "") // Hapus karakter aneh selain huruf, angka, spasi, & strip
+      .replace(/\s+/g, "-")       // Ganti spasi dengan tanda minus (-)
+      .replace(/-+/g, "-")        // Kurangi jika ada tanda minus beruntun (e.g. --- jadi -)
+      .trim();                    // Bersihkan spasi di ujung kiri/kanan
+  };
 
-  
+  const handleTitleChange = (e) => {
+    const value = e.target.value;
+    setFormTitle(value);
+    setFormSlug(convertToSlug(value)); // Auto-generated slug
+  };
+
+  // ---------------------------------------------------------------------------
+  // 5. DATA MUTATION (API POST - ADD ITINERARY)
+  // ---------------------------------------------------------------------------
+  const Save = async (e) => {
+    e.preventDefault();
+
+    // Validasi sederhana agar input wajib tidak kosong
+    if (!formTitle.trim() || !formSlug.trim()) {
+      alert("Title dan Slug wajib diisi!");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token'); // Ambil token login
+      
+      const payload = {
+        title: formTitle,
+        slug: formSlug,
+        summary: formSummary
+      };
+
+      // Request POST ke Laravel
+      const response = await axios.post('http://127.0.0.1:8000/api/itineraries', payload, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (response.data.status === 'success' || response.status === 201) {
+        alert("Itinerary berhasil disimpan!");
+        
+        // 1. Reset isi form modal kembali kosong
+        setFormTitle("");
+        setFormSlug("");
+        setFormSummary("");
+        
+        // 2. Tutup modalnya
+        setIsItineraryOpen(false);
+        
+        // 3. Ambil data terbaru (nama fungsi disesuaikan dengan 'fetcItineraries' di atas)
+        fetcItineraries();
+      }
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.message || "Gagal menyimpan itinerary");
+    }
+  };
+
+  const handleEditClick = (itineraryData) => {
+  // 1. Masukkan data lama ke state form agar muncul di input modal
+  setFormTitle(itineraryData.title);
+  setFormSlug(itineraryData.slug);
+  setFormSummary(itineraryData.summary || "");
+
+  // 1b. SIMPAN SLUG ASLI DARI DATABASE KE STATE BARU
+  setCurrentEditingSlug(itineraryData.slug);
+
+  // 2. Tandai bahwa modal sekarang dalam mode Edit
+  setIsEditOpen(true); 
+
+  // 3. Buka modalnya
+  setIsItineraryOpen(true); 
+};
+
+  const Update = async(e) =>{
+    e.preventDefault();
+    // Validasi sederhana agar input wajib tidak kosong
+    if (!formTitle.trim() || !formSlug.trim()) {
+      alert("Title dan Slug wajib diisi!");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token'); // Ambil token login
+      
+      const payload = {
+        title: formTitle,
+        slug: formSlug,
+        summary: formSummary
+      };
+
+      // Request POST ke Laravel
+      const response = await axios.put(`http://127.0.0.1:8000/api/itineraries/${currentEditingSlug}`, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (response.data.status === 'success' || response.status === 201) {
+        alert("Itinerary berhasil diupdate!");
+
+        setIsItineraryOpen(false);
+        
+        fetcItineraries();
+      }
+    } 
+    catch (error) {
+      alert(error.response?.data?.message || "Gagal menyimpan itinerary");
+    }
+  }
+
+  const handleDeleteClick = (itinerary) => {
+  setSlugToDelete(itinerary.slug);
+  setTitleToDelete(itinerary.title); // Agar nama itinerary muncul di modal confirm-dialog
+  setIsDeleteOpen(true); // Buka modalnya
+};
+
+  const Delete = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.delete(`http://127.0.0.1:8000/api/itineraries/${slugToDelete}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          }
+        });
+        if (response.data.status === 'success' || response.status === 200) {
+        alert("Itinerary berhasil dihapus!");
+        setIsDeleteOpen(false);
+        // Bersihkan state temporer
+        setSlugToDelete("");
+        setTitleToDelete("");
+        fetcItineraries();
+      }
+    }
+      catch(error){
+        alert(error.response?.data?.message || "Gagal Menghapus dari sini:p")
+      }
+    }
+
     return(
         <>
         <div className="app-layout">
           <Navbar />
-
     {/* Navbar 
     <nav className="navbar">
       <a href="itineraries.html" className="navbar__brand"> 
@@ -80,7 +261,7 @@ function Itineraries(){
             <p className="page-subtitle">3 itineraries · plan and organize your trips</p>
           </div>
           <div>
-            <button className="btn btn--primary" type="button">
+            <button className="btn btn--primary" type="button" onClick={() => setIsItineraryOpen(true)}>
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M6.5 1v11M1 6.5h11" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/>
               </svg>
@@ -97,10 +278,10 @@ function Itineraries(){
             <p>Belum ada itinerary. Silakan buat baru!</p>
           ):(
           itineraries.map((data) => 
-            <div className="page-item">
+            <div className="page-item" key={data.id}>
             <div className="page-item__info">
               <span className="page-item__title">
-                <Link to='/itineraries/:slug/builder'>{data.title}</Link>
+                <Link to='/itineraries/${data.slug}/builder'>{data.title}</Link>
                 <span className="page-item__title-arrow">→</span>
               </span>
               <div className="page-item__meta">
@@ -109,13 +290,13 @@ function Itineraries(){
               </div>
             </div>
             <div className="page-item__actions">
-              <Link to={'/itineraries/:slug/builder'}  className="btn btn--ghost btn--sm">
+              <Link to={`/itineraries/${data.slug}/builder`}  className="btn btn--ghost btn--sm">
                 Build
               </Link>
-              <button className="btn btn--ghost btn--sm" type="button">
+              <button className="btn btn--ghost btn--sm" type="button" onClick={() => handleEditClick(data)}>
                 Edit
               </button>
-              <button className="btn btn--danger btn--sm" type="button">
+              <button className="btn btn--danger btn--sm" type="button" onClick={() => handleDeleteClick(data)}>
                 Delete
               </button>
             </div>
@@ -132,12 +313,12 @@ function Itineraries(){
     {/* ======================================================
        MODAL: Create / Edit Itinerary
     ====================================================== */}
-  <div className="modal-backdrop hidden">
+  <div className={`modal-backdrop ${isItineraryOpen ? "" : "hidden"}`}>
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-create-title">
-
+    <form onSubmit={isEditOpen ? Update : Save}>
       <div className="modal__header">
         <h2 className="modal__title" id="modal-create-title">New Itinerary</h2>
-        <button className="modal__close" type="button" aria-label="Close">✕</button>
+        <button className="modal__close" type="button" aria-label="Close" onClick={()=> setIsItineraryOpen(false)}>✕</button>
       </div>
 
       <div className="modal__body">
@@ -150,6 +331,8 @@ function Itineraries(){
             id="new-title"
             name="title"
             placeholder="e.g. Japan Spring Trip"
+            value={formTitle}
+            onChange={handleTitleChange} // Panggil fungsi auto-slug di sini
           />
         </div>
 
@@ -161,6 +344,8 @@ function Itineraries(){
             id="new-slug"
             name="slug"
             placeholder="e.g. japan-spring-trip"
+            value={formSlug}
+            onChange={(e) => setFormSlug(convertToSlug(e.target.value))} // Tetap izinkan edit manual tapi tetap aman berformat slug
           />
           <span className="form-hint">Auto-generated from title. Lowercase, no spaces.</span>
         </div>
@@ -172,30 +357,32 @@ function Itineraries(){
             id="new-summary"
             name="summary"
             placeholder="Brief description of this trip…"
+            value={formSummary}
+            onChange={(e) => setFormSummary(e.target.value)}
           ></textarea>
         </div>
 
       </div>
 
       <div className="modal__footer">
-        <button className="btn btn--ghost" type="button">Cancel</button>
-        <button className="btn btn--primary" type="button">Save Itinerary</button>
+        <button className="btn btn--ghost" type="button" onClick={() => setIsItineraryOpen(false)}>Cancel</button>
+        <button className="btn btn--primary" type="submit">{isEditOpen ? 'Update Itinerary' : 'Save Itinerary'}</button>
       </div>
-
+    </form>
     </div>
   </div>
 
 
-    ======================================================
+    {/* ======================================================
        MODAL: Confirm Delete
-    ====================================================== 
-  {/*  
-  <div className="modal-backdrop">
+    ======================================================  */}
+  
+  <div className={`modal-backdrop ${isDeleteOpen ? "" : "hidden"}`}>
     <div className="modal confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-delete-title">
 
       <div className="modal__header">
         <h2 className="modal__title" id="modal-delete-title">Delete Itinerary</h2>
-        <button className="modal__close" type="button" aria-label="Close">✕</button>
+        <button className="modal__close" type="button" aria-label="Close" onClick={() => setIsDeleteOpen(false)}>✕</button>
       </div>
 
       <div className="modal__body">
@@ -207,19 +394,18 @@ function Itineraries(){
           </svg>
         </div>
         <p className="confirm-dialog__text">
-          Are you sure you want to delete <strong>"Japan Spring Trip"</strong>?<br>
+          Are you sure you want to delete <strong>{titleToDelete}</strong>?<br/>
           This action cannot be undone.
         </p>
       </div>
 
       <div className="modal__footer">
-        <button className="btn btn--ghost" type="button">Cancel</button>
-        <button className="btn btn--danger" type="button">Ok, Delete</button>
+        <button className="btn btn--ghost" type="button" onClick={() => setIsDeleteOpen(false)}>Cancel</button>
+        <button className="btn btn--danger" type="button" onClick={Delete}>Ok, Delete</button>
       </div>
-
     </div>
   </div>
-  */}
+  
   </>
 )}
 export default Itineraries
