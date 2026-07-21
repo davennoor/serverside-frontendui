@@ -8,6 +8,8 @@ import { useState } from "react"
 function Builder(){ 
   const [blocks, setBlocks] = useState([]);
   const [activeBlockId, setActiveBlockId] = useState(null);
+  const	[newTemplateId,	setNewTemplateId]	=	useState('');
+  const [blockToRemove, setBlockToRemove] = useState(null);
   const {slug} = useParams();
 
   const fetchBuilder = async() =>{
@@ -36,6 +38,91 @@ function Builder(){
   const klikBlock = (id) =>{
     setActiveBlockId(activeBlockId === id? null:id)
   }
+
+  const handleSave = async (e, blockId, fields) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const payload = {
+      fields: fields.map((f) => ({
+        field_id: f.id,
+        value: formData.get(String(f.id)) || ''
+      }))
+    };
+    const token = localStorage.getItem('token');
+    try{
+      const res = await axios.put(`http://127.0.0.1:8000/api/itineraries/${slug}/blocks/${blockId}/fields`,payload,{
+        headers:{Authorization:`Bearer ${token}`}
+      }) 
+    setBlocks((prev) => 
+    prev.map((b) => (b.id === blockId ? {...b, fields: res.data.data.fields}:b)))
+  }
+    catch(error){
+      console.error('Gagal menyimpan block', error);
+      alert('Gagal menyimpan perubahan');
+    }
+  }
+
+    const	confirmRemove	=	async	()	=>	{ 
+        if(!blockToRemove) return;  
+        const	token	=	localStorage.getItem('token'); 
+        try	{ 
+          await	axios.delete( `http://127.0.0.1:8000/api/itineraries/${slug}/blocks/${blockToRemove}`, 
+            {	
+              headers:	{	Authorization:	`Bearer	${token}`	}	
+            }); 
+            setBlocks((prev)	=>	prev.filter((b)	=>	b.id	!==	blockToRemove)); 
+          }	
+        catch	(error)	
+        { 
+          console.error('Gagal	menghapus	block',	error); 
+          alert('Gagal	menghapus	block'); 
+        }
+        finally{
+          setBlockToRemove(null);
+        }
+    };
+
+    const handleRemove = (blockId) =>{
+      setBlockToRemove(blockId);
+    }
+
+    const templateIdMap = {
+    overview: 1,
+    'day-plan': 2,
+    activities: 3,
+    accommodation: 4,
+    transport: 5,
+    budget: 6,
+  };
+
+    const	handleAddBlock	=	async	()	=>	{ 
+      if	(!newTemplateId)	{ 
+        alert('Pilih	template	dulu'); 
+        return; 
+      } 
+      const	templateId	= templateIdMap[newTemplateId]; 
+      if	(!templateId)	{ 
+        alert('Template tidak ada'); 
+        return; 
+      } 
+      const	token	=	localStorage.getItem('token'); 
+      try	{ 
+        const	res	=	await	axios.post( `http://127.0.0.1:8000/api/itineraries/${slug}/blocks`, 
+          {	
+            template_id:	templateId,	
+            position:	blocks.length	+	1	
+          }, 
+          {	
+            headers:	{	Authorization:	`Bearer	${token}`	}	
+          }); 
+          setBlocks((prev)	=>	[...prev,	res.data.data]); 
+          setNewTemplateId(''); 
+        }	
+        catch	(error)	
+        { 
+          console.error('Gagal	menambah	block',	error); 
+          alert('Gagal	menambah	block'); 
+        }};
 
   return (
     <>
@@ -104,6 +191,7 @@ function Builder(){
 
               {isOpen && (
                 <>
+                <form	onSubmit={(e)	=>	handleSave(e,	itemblock.id,	itemblock.fields)}>
                 <div className="field-editor__body">
                   {itemblock.fields?.map((field) => (
                 <div className="form-group" key={field.id}>
@@ -112,6 +200,7 @@ function Builder(){
                     className="form-input"
                     type={field.type === 'url'?'url':'text'}
                     id={`f-${field.id}`}
+                    name={field.id}
                     placeholder={`Enter ${field.name.toLowerCase()}`}
                     defaultValue={field.value}
                   />
@@ -123,13 +212,15 @@ function Builder(){
                   <span className="kbd">Esc</span> to close
                 </div>
                 <div className="field-editor__footer-actions">
-                  <button className="btn btn--ghost btn--sm" type="button" >Remove</button>
-                  <button className="btn btn--primary btn--sm" type="button">Save</button>
+                  <button className="btn btn--ghost btn--sm" type="button" onClick={() => handleRemove(itemblock.id)}>Remove</button>
+                  <button className="btn btn--primary btn--sm" type="submit">Save</button>
                 </div>
               </div>
+              </form>
               </>
               )}
             </div>
+            
             
               
             );
@@ -143,7 +234,8 @@ function Builder(){
               <div className="form-wrap">
                 <div className="form-group" style={{flex:1}}>
                   <label className="form-label" htmlFor="block-template">Block Template</label>
-                  <select className="form-input" id="block-template" name="template_id">
+                  <select className="form-input" id="block-template" name="template_id" value={newTemplateId}
+                  onChange={(e) => setNewTemplateId(e.target.value)}>
                     <option value="" disabled selected>Choose a template…</option>
                     <option value="overview">overview — Trip Overview Block</option>
                     <option value="day-plan">day-plan — Day Plan Block</option>
@@ -153,7 +245,7 @@ function Builder(){
                     <option value="budget">budget — Budget Summary Block</option>
                   </select>
                 </div>
-                <button className="btn btn--primary" type="button" style={{alignSelf:'flex-start'}}>
+                <button className="btn btn--primary" type="button" style={{alignSelf:'flex-start'}} onClick={handleAddBlock}>
                   Add
                 </button>
               </div>
@@ -173,15 +265,13 @@ function Builder(){
           
 
 
-  {/* { <!-- ======================================================
-       MODAL: Confirm Remove Block
-       ====================================================== -->
-  
-  <div className="modal-backdrop">
+   
+  {blockToRemove && (
+    <div className="modal-backdrop">
     <div className="modal confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-remove-title">
       <div className="modal__header">
         <h2 className="modal__title" id="modal-remove-title">Remove Block</h2>
-        <button className="modal__close" type="button" aria-label="Close">✕</button>
+        <button className="modal__close" type="button" aria-label="Close" onClick={() => setBlockToRemove(null)}>✕</button>
       </div>
       <div className="modal__body">
         <div className="confirm-dialog__icon">
@@ -197,13 +287,12 @@ function Builder(){
         </p>
       </div>
       <div className="modal__footer">
-        <button className="btn btn--ghost" type="button">Cancel</button>
-        <button className="btn btn--danger" type="button">Ok, Remove</button>
+        <button className="btn btn--ghost" type="button" onClick={() => setBlockToRemove(null)}>Cancel</button>
+        <button className="btn btn--danger" type="button" onClick={() => confirmRemove()}>Ok, Remove</button>
       </div>
     </div>
   </div>
-  {/* { --> } 
-   */}
+  )}
     </>
     
 )}
